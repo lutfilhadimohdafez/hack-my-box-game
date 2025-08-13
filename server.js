@@ -155,13 +155,14 @@ app.prepare().then(() => {
               const sessionName = data.sessionName || 'New Session';
               const maxPlayers = data.maxPlayers || 50;
               const created = await db.createSession(sessionName, sessionCode, adminPassword, maxPlayers);
-              // Set session status to active immediately after creation
-              await db.updateSessionStatus(sessionCode, 'active');
+              // Session starts in 'waiting' status - admin must start it manually
+              console.log(`Created session ${sessionCode} with status: waiting`);
               
               // Add default flags for new sessions
               await addDefaultFlags(created.sessionId);
               
               sessionData = await db.getSession(sessionCode);
+              console.log(`Session data after creation:`, { id: sessionData.id, status: sessionData.status });
             } catch (err) {
               socket.emit('session-error', { message: 'Failed to create session: ' + err.message });
               return;
@@ -253,6 +254,7 @@ app.prepare().then(() => {
         
         socket.emit('game-joined', {
           sessionName: sessionData.session_name,
+          sessionStatus: gameSession.status, // Use gameSession status which should match sessionData.status
           player: {
             id: playerData.id,
             name: playerData.username,

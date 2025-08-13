@@ -18,6 +18,7 @@ export default function GamePage() {
   const [attacks, setAttacks] = useState([]);
   const [isUnderAttack, setIsUnderAttack] = useState(false);
   const [gameStatus, setGameStatus] = useState('waiting');
+  const [challengeCompleted, setChallengeCompleted] = useState(false);
 
   useEffect(() => {
     socketInitializer();
@@ -42,6 +43,24 @@ export default function GamePage() {
     }
   }, [router.query, socket, isConnected, gameJoined]);
 
+  // Check for challenge completion
+  useEffect(() => {
+    if (player && flags && flags.length > 0 && gameStatus === 'active') {
+      const solvedCount = player.solvedFlags?.length || 0;
+      const totalFlags = flags.length;
+      
+      if (solvedCount === totalFlags && totalFlags > 0 && !challengeCompleted) {
+        setChallengeCompleted(true);
+        addMessage('🎉 Congratulations! Challenge Completed! 🎉', 'success');
+        
+        // Auto-refresh after a short delay to show updated state
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      }
+    }
+  }, [player?.solvedFlags, flags, challengeCompleted, gameStatus]);
+
   const socketInitializer = async () => {
     socket = io();
 
@@ -59,14 +78,27 @@ export default function GamePage() {
       setFlags(data.flags);
       setPlayer(data.player);
       setGameJoined(true);
-      setGameStatus('active');
+      setGameStatus(data.sessionStatus || 'waiting'); // Use actual session status
       addMessage(`Welcome to ${data.sessionName}!`, 'success');
-      console.log('Game joined successfully, flags:', data.flags?.length);
+      
+      // Add status-specific message
+      if (data.sessionStatus === 'waiting') {
+        addMessage('Waiting for admin to start the game...', 'info');
+      }
+      
+      console.log('Game joined successfully, flags:', data.flags?.length, 'status:', data.sessionStatus);
     });
 
     socket.on('session-status-changed', (data) => {
       setGameStatus(data.status);
       addMessage(data.message, data.status === 'active' ? 'success' : 'warning');
+      
+      // Auto-refresh when session starts to ensure fresh state
+      if (data.status === 'active') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
     });
 
     socket.on('flag-result', (data) => {
@@ -233,6 +265,23 @@ export default function GamePage() {
         <div className="bg-yellow-900/30 border border-yellow-500 p-4 text-center text-yellow-300">
           {gameStatus === 'waiting' ? '⏳ Waiting for admin to start the game...' :
            gameStatus === 'ended' ? '🏁 Game has ended!' : '⚠️ Game status unknown'}
+        </div>
+      )}
+
+      {/* Challenge Completed Screen */}
+      {challengeCompleted && (
+        <div className="bg-green-900/30 border border-green-500 p-8 text-center mb-6">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-3xl font-bold text-green-400 mb-2">Challenge Completed!</h2>
+          <p className="text-green-300 mb-4">
+            Congratulations! You've successfully solved all {flags.length} challenges!
+          </p>
+          <div className="text-xl text-green-200">
+            Final Score: <span className="font-bold text-green-400">{player?.score} points</span>
+          </div>
+          <div className="text-sm text-green-300 mt-4">
+            Page will auto-refresh in a moment...
+          </div>
         </div>
       )}
 
