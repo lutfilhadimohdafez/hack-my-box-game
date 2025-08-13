@@ -541,6 +541,75 @@ app.prepare().then(() => {
       }
     });
 
+    // Admin: Get all sessions
+    socket.on('admin-get-all-sessions', async () => {
+      console.log('Admin requesting all sessions');
+      try {
+        const sessions = await db.getAllSessions();
+        socket.emit('admin-all-sessions-list', { sessions });
+      } catch (error) {
+        console.error('Error getting all sessions:', error);
+        socket.emit('admin-sessions-error', { message: 'Failed to get sessions' });
+      }
+    });
+
+    // Admin: Kill/End a session
+    socket.on('admin-kill-session', async (data) => {
+      console.log('Admin killing session:', data);
+      try {
+        const { sessionId } = data;
+        const success = await db.endSession(sessionId);
+        
+        if (success) {
+          // Notify all users in that session that it's ended
+          io.to(sessionId).emit('session-ended', { 
+            message: 'Session has been terminated by admin' 
+          });
+          
+          socket.emit('admin-session-killed', { 
+            message: 'Session terminated successfully',
+            sessionId 
+          });
+          
+          // Send updated sessions list
+          const sessions = await db.getAllSessions();
+          socket.emit('admin-all-sessions-list', { sessions });
+        } else {
+          socket.emit('admin-sessions-error', { message: 'Failed to terminate session' });
+        }
+        
+      } catch (error) {
+        console.error('Error killing session:', error);
+        socket.emit('admin-sessions-error', { message: 'Failed to terminate session' });
+      }
+    });
+
+    // Admin: Delete a session permanently
+    socket.on('admin-delete-session', async (data) => {
+      console.log('Admin deleting session:', data);
+      try {
+        const { sessionId } = data;
+        const success = await db.deleteSession(sessionId);
+        
+        if (success) {
+          socket.emit('admin-session-deleted', { 
+            message: 'Session deleted successfully',
+            sessionId 
+          });
+          
+          // Send updated sessions list
+          const sessions = await db.getAllSessions();
+          socket.emit('admin-all-sessions-list', { sessions });
+        } else {
+          socket.emit('admin-sessions-error', { message: 'Failed to delete session' });
+        }
+        
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        socket.emit('admin-sessions-error', { message: 'Failed to delete session' });
+      }
+    });
+
     // Submit flag
     socket.on('submit-flag', async (data) => {
       try {

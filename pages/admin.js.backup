@@ -141,14 +141,10 @@ export default function AdminPanel() {
 
     socket.on('admin-session-killed', (data) => {
       addMessage(data.message, 'success');
-      // Automatically refresh the sessions list after killing a session
-      loadAllSessions();
     });
 
     socket.on('admin-session-deleted', (data) => {
       addMessage(data.message, 'success');
-      // Automatically refresh the sessions list after deletion
-      loadAllSessions();
     });
 
     socket.on('admin-sessions-error', (data) => {
@@ -375,16 +371,6 @@ export default function AdminPanel() {
       }
     }
   }, [router.query, socket, isConnected]);
-
-  // Auto-load sessions when socket connects and user is on manage tab
-  useEffect(() => {
-    if (socket && isConnected && activeTab === 'manage') {
-      // Add a small delay to ensure all socket handlers are set up
-      setTimeout(() => {
-        loadAllSessions();
-      }, 100);
-    }
-  }, [socket, isConnected, activeTab]);
 
   if (!sessionData) {
     return (
@@ -719,6 +705,9 @@ export default function AdminPanel() {
                   </div>
                 ))}
                 
+                {templateFlags.length === 0 && (
+                  <div className="col-span-full text-center text-gray-400 py-8">
+                    <div className="text-4xl mb-2">�</div>
                 {templateFlags.length === 0 && (
                   <div className="col-span-full text-center text-gray-400 py-8">
                     <div className="text-4xl mb-2">📋</div>

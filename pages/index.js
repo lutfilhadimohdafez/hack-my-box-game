@@ -329,24 +329,19 @@ export default function JoinSession() {
           </button>
         </form>
 
-        {/* Demo Info */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-6 p-4 bg-blue-900/30 border border-blue-500 rounded">
-            <h3 className="text-blue-400 font-medium mb-2">💡 Demo Session</h3>
-            <div className="text-sm text-blue-300 space-y-1">
-              <div>Code: <span className="font-mono">DEMO2024</span></div>
-              <div>Admin Pass: <span className="font-mono">admin123</span></div>
-            </div>
-          </div>
-        )}
-
         {/* Additional Links */}
-        <div className="mt-6 pt-6 border-t border-gray-700 text-center">
+        <div className="mt-6 pt-6 border-t border-gray-700 text-center space-y-3">
           <button
             onClick={() => router.push('/leaderboard')}
-            className="text-gray-400 hover:text-white text-sm transition-colors"
+            className="block w-full text-gray-400 hover:text-white text-sm transition-colors"
           >
             📊 View Leaderboard Display
+          </button>
+          <button
+            onClick={() => router.push('/sessions')}
+            className="block w-full text-gray-400 hover:text-red-400 text-sm transition-colors"
+          >
+            🎛️ Session Manager (Admin)
           </button>
         </div>
 
