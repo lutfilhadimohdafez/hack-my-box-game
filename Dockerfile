@@ -18,6 +18,9 @@ COPY . .
 # Create database directory with proper permissions
 RUN mkdir -p database && chown -R node:node database
 
+# Initialize the database before building
+RUN npm run db:init
+
 # Build the Next.js app
 RUN npm run build
 
