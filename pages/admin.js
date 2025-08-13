@@ -183,14 +183,20 @@ export default function AdminPanel() {
             <h2 className="text-xl font-bold mb-4 text-yellow-400">⚡ Quick Actions</h2>
             <div className="space-y-3">
               <button
-                onClick={() => router.push('/leaderboard')}
+                onClick={() => {
+                  const leaderboardUrl = `/leaderboard?session=${sessionData.id}&sessionCode=${sessionData.sessionCode}&sessionName=${encodeURIComponent(sessionData.sessionName)}`;
+                  router.push(leaderboardUrl);
+                }}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white p-2 rounded text-sm"
               >
                 📊 View Leaderboard Display
               </button>
               
               <button
-                onClick={() => window.open('/leaderboard', '_blank')}
+                onClick={() => {
+                  const leaderboardUrl = `/leaderboard?session=${sessionData.id}&sessionCode=${sessionData.sessionCode}&sessionName=${encodeURIComponent(sessionData.sessionName)}`;
+                  window.open(leaderboardUrl, '_blank');
+                }}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded text-sm"
               >
                 🖥️ Open Leaderboard (New Tab)

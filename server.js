@@ -46,6 +46,30 @@ async function addDefaultFlags(sessionId) {
       hints: ['This looks encoded', 'Try base64 decoding', 'Online decoder tools exist'],
       difficulty: 'medium',
       points: 200
+    },
+    {
+      title: 'Caesar Cipher',
+      clue: 'FDHVDU FLSKHU LV HDV\\!',
+      answer: 'CAESAR CIPHER IS EASY',
+      hints: ['This is a shifted alphabet', 'Try shifting letters by 3', 'ROT3 or Caesar cipher'],
+      difficulty: 'easy',
+      points: 150
+    },
+    {
+      title: 'Binary Message',
+      clue: '01001000 01000001 01000011 01001011',
+      answer: 'HACK',
+      hints: ['This is binary code', 'Convert binary to ASCII', 'Each 8-bit represents a character'],
+      difficulty: 'medium',
+      points: 250
+    },
+    {
+      title: 'Reverse Engineering',
+      clue: 'KCAH YM XOB',
+      answer: 'HACK MY BOX',
+      hints: ['Something seems backwards', 'Try reading it in reverse', 'Mirror mirror on the wall'],
+      difficulty: 'easy',
+      points: 100
     }
   ];
 
@@ -329,6 +353,28 @@ app.prepare().then(() => {
         
       } catch (error) {
         console.error('Error joining admin to session:', error);
+      }
+    });
+
+    // Leaderboard: Join session room for live updates
+    socket.on('leaderboard-join-session', async (data) => {
+      console.log('Leaderboard joining session room:', data);
+      try {
+        const { sessionId } = data;
+        
+        // Join the session room
+        socket.join(sessionId);
+        console.log(`Leaderboard joined session room: ${sessionId}`);
+        
+        // Get current game session and send initial leaderboard
+        const gameSession = gameSessions.get(sessionId);
+        if (gameSession) {
+          broadcastLeaderboard(gameSession);
+          console.log('Sent initial leaderboard to leaderboard display');
+        }
+        
+      } catch (error) {
+        console.error('Error joining leaderboard to session:', error);
       }
     });
 

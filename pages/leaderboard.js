@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import io from 'socket.io-client';
 
 let socket;
 
 export default function LeaderboardDisplay() {
+  const router = useRouter();
   const [leaderboard, setLeaderboard] = useState([]);
   const [attacks, setAttacks] = useState([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [recentActivity, setRecentActivity] = useState([]);
+  const [sessionData, setSessionData] = useState(null);
 
   useEffect(() => {
     socketInitializer();
@@ -17,6 +20,24 @@ export default function LeaderboardDisplay() {
       if (socket) socket.disconnect();
     };
   }, []);
+
+  // Get session info from URL params and join session room
+  useEffect(() => {
+    const { session, sessionCode, sessionName } = router.query;
+    if (session) {
+      setSessionData({
+        id: session,
+        sessionCode: sessionCode || 'UNKNOWN',
+        sessionName: decodeURIComponent(sessionName || 'Unknown Session')
+      });
+      
+      // Join the session room for live updates
+      if (socket && isConnected) {
+        console.log('Leaderboard joining session room:', session);
+        socket.emit('leaderboard-join-session', { sessionId: session });
+      }
+    }
+  }, [router.query, socket, isConnected]);
 
   const socketInitializer = async () => {
     socket = io();
@@ -87,6 +108,11 @@ export default function LeaderboardDisplay() {
             <div className="flex items-center space-x-4">
               <h1 className="text-4xl font-bold text-white">🏴‍☠️ HACK MY BOX</h1>
               <div className="text-xl text-red-200">LIVE LEADERBOARD</div>
+              {sessionData && (
+                <div className="text-lg text-yellow-300">
+                  📊 {sessionData.sessionName}
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-6">
               <div className="text-right">
