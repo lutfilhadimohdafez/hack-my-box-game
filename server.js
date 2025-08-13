@@ -378,6 +378,104 @@ app.prepare().then(() => {
       }
     });
 
+    // Admin: Get flags for management
+    socket.on('admin-get-flags', async (data) => {
+      console.log('Admin requesting flags:', data);
+      try {
+        const { sessionId } = data;
+        const flags = await db.getSessionFlags(sessionId);
+        socket.emit('admin-flags-list', { flags });
+      } catch (error) {
+        console.error('Error getting flags:', error);
+        socket.emit('admin-flags-error', { message: 'Failed to get flags' });
+      }
+    });
+
+    // Admin: Add new flag
+    socket.on('admin-add-flag', async (data) => {
+      console.log('Admin adding flag:', data);
+      try {
+        const { sessionId, title, clue, answer, hints, difficulty, points } = data;
+        const flagId = await db.addFlag(sessionId, title, clue, answer, hints, difficulty, points);
+        
+        // Update game session flags
+        const gameSession = gameSessions.get(sessionId);
+        if (gameSession) {
+          const newFlag = await db.getFlag(flagId);
+          gameSession.flags.set(flagId, newFlag);
+        }
+        
+        socket.emit('admin-flag-added', { flagId, message: 'Flag added successfully' });
+        
+        // Send updated flags list
+        const flags = await db.getSessionFlags(sessionId);
+        socket.emit('admin-flags-list', { flags });
+        
+      } catch (error) {
+        console.error('Error adding flag:', error);
+        socket.emit('admin-flags-error', { message: 'Failed to add flag' });
+      }
+    });
+
+    // Admin: Update flag
+    socket.on('admin-update-flag', async (data) => {
+      console.log('Admin updating flag:', data);
+      try {
+        const { flagId, title, clue, answer, hints, difficulty, points, sessionId } = data;
+        const success = await db.updateFlag(flagId, title, clue, answer, hints, difficulty, points);
+        
+        if (success) {
+          // Update game session flags
+          const gameSession = gameSessions.get(sessionId);
+          if (gameSession) {
+            const updatedFlag = await db.getFlag(flagId);
+            gameSession.flags.set(flagId, updatedFlag);
+          }
+          
+          socket.emit('admin-flag-updated', { message: 'Flag updated successfully' });
+          
+          // Send updated flags list
+          const flags = await db.getSessionFlags(sessionId);
+          socket.emit('admin-flags-list', { flags });
+        } else {
+          socket.emit('admin-flags-error', { message: 'Flag not found or not updated' });
+        }
+        
+      } catch (error) {
+        console.error('Error updating flag:', error);
+        socket.emit('admin-flags-error', { message: 'Failed to update flag' });
+      }
+    });
+
+    // Admin: Delete flag
+    socket.on('admin-delete-flag', async (data) => {
+      console.log('Admin deleting flag:', data);
+      try {
+        const { flagId, sessionId } = data;
+        const success = await db.deleteFlag(flagId);
+        
+        if (success) {
+          // Remove from game session flags
+          const gameSession = gameSessions.get(sessionId);
+          if (gameSession) {
+            gameSession.flags.delete(flagId);
+          }
+          
+          socket.emit('admin-flag-deleted', { message: 'Flag deleted successfully' });
+          
+          // Send updated flags list
+          const flags = await db.getSessionFlags(sessionId);
+          socket.emit('admin-flags-list', { flags });
+        } else {
+          socket.emit('admin-flags-error', { message: 'Flag not found or not deleted' });
+        }
+        
+      } catch (error) {
+        console.error('Error deleting flag:', error);
+        socket.emit('admin-flags-error', { message: 'Failed to delete flag' });
+      }
+    });
+
     // Submit flag
     socket.on('submit-flag', async (data) => {
       try {
