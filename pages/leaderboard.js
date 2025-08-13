@@ -66,12 +66,19 @@ export default function LeaderboardDisplay() {
     });
 
     socket.on('attack-launched', (attack) => {
+      // Add attack to the attacks list immediately
+      setAttacks(prev => [...prev, attack]);
+      
       addRecentActivity({
         type: 'attack',
         message: `${attack.attacker} launched ${attack.type.toUpperCase()} attack!`,
         timestamp: attack.timestamp,
         playerName: attack.attacker
       });
+    });
+
+    socket.on('attack-ended', (attackId) => {
+      setAttacks(prev => prev.filter(attack => attack.id !== attackId));
     });
   };
 

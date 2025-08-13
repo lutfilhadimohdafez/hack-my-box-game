@@ -28,53 +28,41 @@ const sessionMiddleware = session({
 const gameSessions = new Map();
 const playerSockets = new Map(); // playerId -> socketId mapping
 
-// Function to add default flags to new sessions
+// Function to add default flags to new sessions from templates
 async function addDefaultFlags(sessionId) {
-  const defaultFlags = [
-    {
-      title: 'Welcome Challenge',
-      clue: 'What is the answer to life, the universe, and everything?',
-      answer: '42',
-      hints: ['Think Douglas Adams', 'Hitchhiker\'s Guide to the Galaxy', 'The ultimate answer'],
-      difficulty: 'easy',
-      points: 100
-    },
-    {
-      title: 'Base64 Basics',
-      clue: 'SGFjayBNeSBCb3g=',
-      answer: 'HACK_MY_BOX',
-      hints: ['This looks encoded', 'Try base64 decoding', 'Online decoder tools exist'],
-      difficulty: 'medium',
-      points: 200
-    },
-    {
-      title: 'Caesar Cipher',
-      clue: 'FDHVDU FLSKHU LV HDV\\!',
-      answer: 'CAESAR CIPHER IS EASY',
-      hints: ['This is a shifted alphabet', 'Try shifting letters by 3', 'ROT3 or Caesar cipher'],
-      difficulty: 'easy',
-      points: 150
-    },
-    {
-      title: 'Binary Message',
-      clue: '01001000 01000001 01000011 01001011',
-      answer: 'HACK',
-      hints: ['This is binary code', 'Convert binary to ASCII', 'Each 8-bit represents a character'],
-      difficulty: 'medium',
-      points: 250
-    },
-    {
-      title: 'Reverse Engineering',
-      clue: 'KCAH YM XOB',
-      answer: 'HACK MY BOX',
-      hints: ['Something seems backwards', 'Try reading it in reverse', 'Mirror mirror on the wall'],
-      difficulty: 'easy',
-      points: 100
+  try {
+    const templateFlags = await db.getTemplateFlags();
+    
+    for (const template of templateFlags) {
+      await db.addFlag(
+        sessionId, 
+        template.title, 
+        template.clue, 
+        template.answer, 
+        template.hints, 
+        template.difficulty, 
+        template.points
+      );
     }
-  ];
-
-  for (const flag of defaultFlags) {
-    await db.addFlag(sessionId, flag.title, flag.clue, flag.answer, flag.hints, flag.difficulty, flag.points);
+    
+    console.log(`Added ${templateFlags.length} default flags to session`);
+  } catch (error) {
+    console.error('Error adding default flags:', error);
+    // Fallback to hardcoded flags if template system fails
+    const fallbackFlags = [
+      {
+        title: 'Welcome Challenge',
+        clue: 'What is the answer to life, the universe, and everything?',
+        answer: '42',
+        hints: ['Think Douglas Adams', 'Hitchhiker\'s Guide to the Galaxy', 'The ultimate answer'],
+        difficulty: 'easy',
+        points: 100
+      }
+    ];
+    
+    for (const flag of fallbackFlags) {
+      await db.addFlag(sessionId, flag.title, flag.clue, flag.answer, flag.hints, flag.difficulty, flag.points);
+    }
   }
 }
 
@@ -476,6 +464,83 @@ app.prepare().then(() => {
       }
     });
 
+    // Admin: Get template flags for default management
+    socket.on('admin-get-template-flags', async () => {
+      console.log('Admin requesting template flags');
+      try {
+        const templateFlags = await db.getTemplateFlags();
+        socket.emit('admin-template-flags-list', { flags: templateFlags });
+      } catch (error) {
+        console.error('Error getting template flags:', error);
+        socket.emit('admin-template-flags-error', { message: 'Failed to get template flags' });
+      }
+    });
+
+    // Admin: Add new template flag
+    socket.on('admin-add-template-flag', async (data) => {
+      console.log('Admin adding template flag:', data);
+      try {
+        const { title, clue, answer, hints, difficulty, points } = data;
+        const flagId = await db.addTemplateFlag(title, clue, answer, hints, difficulty, points);
+        
+        socket.emit('admin-template-flag-added', { flagId, message: 'Template flag added successfully' });
+        
+        // Send updated template flags list
+        const templateFlags = await db.getTemplateFlags();
+        socket.emit('admin-template-flags-list', { flags: templateFlags });
+        
+      } catch (error) {
+        console.error('Error adding template flag:', error);
+        socket.emit('admin-template-flags-error', { message: 'Failed to add template flag' });
+      }
+    });
+
+    // Admin: Update template flag
+    socket.on('admin-update-template-flag', async (data) => {
+      console.log('Admin updating template flag:', data);
+      try {
+        const { flagId, title, clue, answer, hints, difficulty, points } = data;
+        const success = await db.updateTemplateFlag(flagId, title, clue, answer, hints, difficulty, points);
+        
+        if (success) {
+          socket.emit('admin-template-flag-updated', { message: 'Template flag updated successfully' });
+          
+          // Send updated template flags list
+          const templateFlags = await db.getTemplateFlags();
+          socket.emit('admin-template-flags-list', { flags: templateFlags });
+        } else {
+          socket.emit('admin-template-flags-error', { message: 'Template flag not found or not updated' });
+        }
+        
+      } catch (error) {
+        console.error('Error updating template flag:', error);
+        socket.emit('admin-template-flags-error', { message: 'Failed to update template flag' });
+      }
+    });
+
+    // Admin: Delete template flag
+    socket.on('admin-delete-template-flag', async (data) => {
+      console.log('Admin deleting template flag:', data);
+      try {
+        const { flagId } = data;
+        const success = await db.deleteTemplateFlag(flagId);
+        
+        if (success) {
+          socket.emit('admin-template-flag-deleted', { message: 'Template flag deleted successfully' });
+          
+          // Send updated template flags list
+          const templateFlags = await db.getTemplateFlags();
+          socket.emit('admin-template-flags-list', { flags: templateFlags });
+        } else {
+          socket.emit('admin-template-flags-error', { message: 'Template flag not found or not deleted' });
+        }
+        
+      } catch (error) {
+        console.error('Error deleting template flag:', error);
+        socket.emit('admin-template-flags-error', { message: 'Failed to delete template flag' });
+      }
+    });
+
     // Submit flag
     socket.on('submit-flag', async (data) => {
       try {
@@ -697,6 +762,9 @@ app.prepare().then(() => {
         // Broadcast attack
         io.to(sessionId).emit('attack-launched', attack);
         
+        // Update leaderboard to show new attack
+        broadcastLeaderboard(gameSession);
+        
         socket.emit('attack-result', {
           success: true,
           message: `${data.attackType.toUpperCase()} attack launched!`,
@@ -708,6 +776,9 @@ app.prepare().then(() => {
           gameSession.attacks = gameSession.attacks.filter(a => a.id !== attackId);
           attacker.isAttacking = false;
           io.to(sessionId).emit('attack-ended', attackId);
+          
+          // Update leaderboard to remove ended attack
+          broadcastLeaderboard(gameSession);
         }, duration);
 
       } catch (error) {

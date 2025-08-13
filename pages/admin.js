@@ -14,9 +14,21 @@ export default function AdminPanel() {
   
   // Flag management state
   const [flags, setFlags] = useState([]);
+  const [templateFlags, setTemplateFlags] = useState([]);
+  const [activeTab, setActiveTab] = useState('session'); // 'session' or 'templates'
   const [showFlagForm, setShowFlagForm] = useState(false);
+  const [showTemplateFlagForm, setShowTemplateFlagForm] = useState(false);
   const [editingFlag, setEditingFlag] = useState(null);
+  const [editingTemplateFlag, setEditingTemplateFlag] = useState(null);
   const [flagForm, setFlagForm] = useState({
+    title: '',
+    clue: '',
+    answer: '',
+    hints: [''],
+    difficulty: 'medium',
+    points: 100
+  });
+  const [templateFlagForm, setTemplateFlagForm] = useState({
     title: '',
     clue: '',
     answer: '',
@@ -94,6 +106,32 @@ export default function AdminPanel() {
     socket.on('admin-flags-error', (data) => {
       addMessage(data.message, 'error');
     });
+
+    // Template flag management socket handlers
+    socket.on('admin-template-flags-list', (data) => {
+      setTemplateFlags(data.flags);
+    });
+
+    socket.on('admin-template-flag-added', (data) => {
+      addMessage(data.message, 'success');
+      setShowTemplateFlagForm(false);
+      resetTemplateFlagForm();
+    });
+
+    socket.on('admin-template-flag-updated', (data) => {
+      addMessage(data.message, 'success');
+      setShowTemplateFlagForm(false);
+      setEditingTemplateFlag(null);
+      resetTemplateFlagForm();
+    });
+
+    socket.on('admin-template-flag-deleted', (data) => {
+      addMessage(data.message, 'success');
+    });
+
+    socket.on('admin-template-flags-error', (data) => {
+      addMessage(data.message, 'error');
+    });
   };
 
   const addMessage = (message, type) => {
@@ -108,6 +146,17 @@ export default function AdminPanel() {
   // Flag management functions
   const resetFlagForm = () => {
     setFlagForm({
+      title: '',
+      clue: '',
+      answer: '',
+      hints: [''],
+      difficulty: 'medium',
+      points: 100
+    });
+  };
+
+  const resetTemplateFlagForm = () => {
+    setTemplateFlagForm({
       title: '',
       clue: '',
       answer: '',
@@ -138,6 +187,26 @@ export default function AdminPanel() {
     }
   };
 
+  const handleTemplateFlagSubmit = (e) => {
+    e.preventDefault();
+    if (!socket) return;
+
+    const flagData = {
+      title: templateFlagForm.title,
+      clue: templateFlagForm.clue,
+      answer: templateFlagForm.answer,
+      hints: templateFlagForm.hints.filter(hint => hint.trim() !== ''),
+      difficulty: templateFlagForm.difficulty,
+      points: parseInt(templateFlagForm.points)
+    };
+
+    if (editingTemplateFlag) {
+      socket.emit('admin-update-template-flag', { ...flagData, flagId: editingTemplateFlag.id });
+    } else {
+      socket.emit('admin-add-template-flag', flagData);
+    }
+  };
+
   const editFlag = (flag) => {
     setEditingFlag(flag);
     setFlagForm({
@@ -151,9 +220,28 @@ export default function AdminPanel() {
     setShowFlagForm(true);
   };
 
+  const editTemplateFlag = (flag) => {
+    setEditingTemplateFlag(flag);
+    setTemplateFlagForm({
+      title: flag.title,
+      clue: flag.clue,
+      answer: flag.answer,
+      hints: flag.hints.length > 0 ? flag.hints : [''],
+      difficulty: flag.difficulty,
+      points: flag.points
+    });
+    setShowTemplateFlagForm(true);
+  };
+
   const deleteFlag = (flagId) => {
-    if (confirm('Are you sure you want to delete this flag?')) {
+    if (confirm('Are you sure you want you delete this flag?')) {
       socket.emit('admin-delete-flag', { flagId, sessionId: sessionData.id });
+    }
+  };
+
+  const deleteTemplateFlag = (flagId) => {
+    if (confirm('Are you sure you want to delete this template flag?')) {
+      socket.emit('admin-delete-template-flag', { flagId });
     }
   };
 
@@ -178,12 +266,47 @@ export default function AdminPanel() {
     }));
   };
 
+  // Template flag hint management functions
+  const addTemplateFlagHintField = () => {
+    setTemplateFlagForm(prev => ({
+      ...prev,
+      hints: [...prev.hints, '']
+    }));
+  };
+
+  const updateTemplateFlagHint = (index, value) => {
+    setTemplateFlagForm(prev => ({
+      ...prev,
+      hints: prev.hints.map((hint, i) => i === index ? value : hint)
+    }));
+  };
+
+  const removeTemplateFlagHint = (index) => {
+    setTemplateFlagForm(prev => ({
+      ...prev,
+      hints: prev.hints.filter((_, i) => i !== index)
+    }));
+  };
+
   const controlSession = (action) => {
     if (sessionData) {
       socket.emit('admin-control-session', {
         action,
         sessionCode: sessionData.sessionCode
       });
+    }
+  };
+
+  const loadTemplateFlags = () => {
+    if (socket && isConnected) {
+      socket.emit('admin-get-template-flags');
+    }
+  };
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'templates') {
+      loadTemplateFlags();
     }
   };
 
@@ -389,64 +512,160 @@ export default function AdminPanel() {
 
         {/* Flag Management Section */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-orange-400">🚩 Flag Management</h2>
+          {/* Tab Navigation */}
+          <div className="flex space-x-1 mb-6 border-b border-gray-700">
             <button
-              onClick={() => {
-                setShowFlagForm(true);
-                setEditingFlag(null);
-                resetFlagForm();
-              }}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm"
+              onClick={() => switchTab('session')}
+              className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
+                activeTab === 'session'
+                  ? 'bg-orange-600 text-white border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
             >
-              ➕ Add New Flag
+              🚩 Session Flags
+            </button>
+            <button
+              onClick={() => switchTab('templates')}
+              className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
+                activeTab === 'templates'
+                  ? 'bg-orange-600 text-white border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              📋 Default Templates
             </button>
           </div>
 
-          {/* Flags List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
-            {flags.map((flag) => (
-              <div key={flag.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-lg text-white">{flag.title}</h3>
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => editFlag(flag)}
-                      className="text-blue-400 hover:text-blue-300 text-sm"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => deleteFlag(flag.id)}
-                      className="text-red-400 hover:text-red-300 text-sm"
-                    >
-                      🗑️
-                    </button>
+          {/* Session Flags Tab */}
+          {activeTab === 'session' && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-orange-400">🚩 Session Flags</h2>
+                <button
+                  onClick={() => {
+                    setShowFlagForm(true);
+                    setEditingFlag(null);
+                    resetFlagForm();
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm"
+                >
+                  ➕ Add New Flag
+                </button>
+              </div>
+
+              {/* Session Flags List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+                {flags.map((flag) => (
+                  <div key={flag.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg text-white">{flag.title}</h3>
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => editFlag(flag)}
+                          className="text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => deleteFlag(flag.id)}
+                          className="text-red-400 hover:text-red-300 text-sm"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-300 mb-2">{flag.clue}</div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className={`px-2 py-1 rounded ${
+                        flag.difficulty === 'easy' ? 'bg-green-600' :
+                        flag.difficulty === 'medium' ? 'bg-yellow-600' : 'bg-red-600'
+                      }`}>
+                        {flag.difficulty}
+                      </span>
+                      <span className="text-yellow-400">{flag.points} pts</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {flag.hints?.length || 0} hints available
+                    </div>
                   </div>
-                </div>
-                <div className="text-sm text-gray-300 mb-2">{flag.clue}</div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className={`px-2 py-1 rounded ${
-                    flag.difficulty === 'easy' ? 'bg-green-600' :
-                    flag.difficulty === 'medium' ? 'bg-yellow-600' : 'bg-red-600'
-                  }`}>
-                    {flag.difficulty}
-                  </span>
-                  <span className="text-yellow-400">{flag.points} pts</span>
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {flag.hints?.length || 0} hints available
-                </div>
+                ))}
+                
+                {flags.length === 0 && (
+                  <div className="col-span-full text-center text-gray-400 py-8">
+                    <div className="text-4xl mb-2">🚩</div>
+                    <div>No flags created yet</div>
+                  </div>
+                )}
               </div>
-            ))}
-            
-            {flags.length === 0 && (
-              <div className="col-span-full text-center text-gray-400 py-8">
-                <div className="text-4xl mb-2">🚩</div>
-                <div>No flags created yet</div>
+            </div>
+          )}
+
+          {/* Template Flags Tab */}
+          {activeTab === 'templates' && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-orange-400">📋 Default Flag Templates</h2>
+                <button
+                  onClick={() => {
+                    setShowTemplateFlagForm(true);
+                    setEditingTemplateFlag(null);
+                    resetTemplateFlagForm();
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm"
+                >
+                  ➕ Add New Template
+                </button>
               </div>
-            )}
-          </div>
+              <div className="text-sm text-gray-400 mb-4">
+                These are the default flags that will be added to all new game sessions.
+              </div>
+
+              {/* Template Flags List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+                {templateFlags.map((flag) => (
+                  <div key={flag.id} className="bg-gray-700 rounded-lg p-4 border border-purple-600">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-lg text-white">{flag.title}</h3>
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => editTemplateFlag(flag)}
+                          className="text-blue-400 hover:text-blue-300 text-sm"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => deleteTemplateFlag(flag.id)}
+                          className="text-red-400 hover:text-red-300 text-sm"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-300 mb-2">{flag.clue}</div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className={`px-2 py-1 rounded ${
+                        flag.difficulty === 'easy' ? 'bg-green-600' :
+                        flag.difficulty === 'medium' ? 'bg-yellow-600' : 'bg-red-600'
+                      }`}>
+                        {flag.difficulty}
+                      </span>
+                      <span className="text-yellow-400">{flag.points} pts</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {flag.hints?.length || 0} hints available
+                    </div>
+                  </div>
+                ))}
+                
+                {templateFlags.length === 0 && (
+                  <div className="col-span-full text-center text-gray-400 py-8">
+                    <div className="text-4xl mb-2">�</div>
+                    <div>No template flags created yet</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Flag Form Modal */}
           {showFlagForm && (
@@ -574,6 +793,143 @@ export default function AdminPanel() {
                         setShowFlagForm(false);
                         setEditingFlag(null);
                         resetFlagForm();
+                      }}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Template Flag Form Modal */}
+          {showTemplateFlagForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-purple-400">
+                    {editingTemplateFlag ? 'Edit Template Flag' : 'Add New Template Flag'}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowTemplateFlagForm(false);
+                      setEditingTemplateFlag(null);
+                      resetTemplateFlagForm();
+                    }}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <form onSubmit={handleTemplateFlagSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={templateFlagForm.title}
+                      onChange={(e) => setTemplateFlagForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Clue</label>
+                    <textarea
+                      value={templateFlagForm.clue}
+                      onChange={(e) => setTemplateFlagForm(prev => ({ ...prev, clue: e.target.value }))}
+                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white h-20"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Answer</label>
+                    <input
+                      type="text"
+                      value={templateFlagForm.answer}
+                      onChange={(e) => setTemplateFlagForm(prev => ({ ...prev, answer: e.target.value }))}
+                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Difficulty</label>
+                      <select
+                        value={templateFlagForm.difficulty}
+                        onChange={(e) => setTemplateFlagForm(prev => ({ ...prev, difficulty: e.target.value }))}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                      >
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Points</label>
+                      <input
+                        type="number"
+                        value={templateFlagForm.points}
+                        onChange={(e) => setTemplateFlagForm(prev => ({ ...prev, points: parseInt(e.target.value) }))}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                        min="1"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium">Hints</label>
+                      <button
+                        type="button"
+                        onClick={addTemplateFlagHintField}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                      >
+                        + Add Hint
+                      </button>
+                    </div>
+                    {templateFlagForm.hints.map((hint, index) => (
+                      <div key={index} className="flex space-x-2 mb-2">
+                        <input
+                          type="text"
+                          value={hint}
+                          onChange={(e) => updateTemplateFlagHint(index, e.target.value)}
+                          placeholder={`Hint ${index + 1}`}
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                        />
+                        {templateFlagForm.hints.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeTemplateFlagHint(index)}
+                            className="text-red-400 hover:text-red-300 px-2"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex space-x-3 pt-4">
+                    <button
+                      type="submit"
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded"
+                    >
+                      {editingTemplateFlag ? 'Update Template' : 'Add Template'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTemplateFlagForm(false);
+                        setEditingTemplateFlag(null);
+                        resetTemplateFlagForm();
                       }}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded"
                     >

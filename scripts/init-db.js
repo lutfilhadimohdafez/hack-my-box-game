@@ -99,6 +99,19 @@ db.serialize(() => {
     FOREIGN KEY (target_id) REFERENCES players (id)
   )`);
 
+  // Template flags table for default flag management
+  db.run(`CREATE TABLE IF NOT EXISTS template_flags (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    clue TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    hints TEXT DEFAULT '[]',
+    difficulty TEXT DEFAULT 'medium',
+    points INTEGER DEFAULT 100,
+    is_active BOOLEAN DEFAULT true,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Create demo session
   const demoSessionId = 'demo-session-2024';
   const demoCode = 'DEMO2024';
@@ -180,6 +193,64 @@ db.serialize(() => {
   });
 
   console.log('✅ Demo flags inserted');
+
+  // Insert default template flags
+  const templateFlags = [
+    {
+      id: 'template-1',
+      title: 'Welcome Challenge',
+      clue: 'What is the answer to life, the universe, and everything?',
+      answer: '42',
+      hints: JSON.stringify(['Think Douglas Adams', 'Hitchhiker\'s Guide to the Galaxy', 'The ultimate answer']),
+      difficulty: 'easy',
+      points: 100
+    },
+    {
+      id: 'template-2',
+      title: 'Base64 Basics',
+      clue: 'SGFjayBNeSBCb3g=',
+      answer: 'HACK_MY_BOX',
+      hints: JSON.stringify(['This looks encoded', 'Try base64 decoding', 'Online decoder tools exist']),
+      difficulty: 'medium',
+      points: 200
+    },
+    {
+      id: 'template-3',
+      title: 'Caesar Cipher',
+      clue: 'FDHVDU FLSKHU LV HDV\\!',
+      answer: 'CAESAR CIPHER IS EASY',
+      hints: JSON.stringify(['This is a shifted alphabet', 'Try shifting letters by 3', 'ROT3 or Caesar cipher']),
+      difficulty: 'easy',
+      points: 150
+    },
+    {
+      id: 'template-4',
+      title: 'Binary Message',
+      clue: '01001000 01000001 01000011 01001011',
+      answer: 'HACK',
+      hints: JSON.stringify(['This is binary code', 'Convert binary to ASCII', 'Each 8-bit represents a character']),
+      difficulty: 'medium',
+      points: 250
+    },
+    {
+      id: 'template-5',
+      title: 'Reverse Engineering',
+      clue: 'KCAH YM XOB',
+      answer: 'HACK MY BOX',
+      hints: JSON.stringify(['Something seems backwards', 'Try reading it in reverse', 'Mirror mirror on the wall']),
+      difficulty: 'easy',
+      points: 100
+    }
+  ];
+
+  templateFlags.forEach(flag => {
+    db.run(`INSERT OR IGNORE INTO template_flags 
+      (id, title, clue, answer, hints, difficulty, points) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [flag.id, flag.title, flag.clue, flag.answer, flag.hints, flag.difficulty, flag.points]);
+  });
+
+  console.log('✅ Template flags inserted');
 });
 
 db.close((err) => {
