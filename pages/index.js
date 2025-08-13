@@ -329,22 +329,6 @@ export default function JoinSession() {
           </button>
         </form>
 
-        {/* Additional Links */}
-        <div className="mt-6 pt-6 border-t border-gray-700 text-center space-y-3">
-          <button
-            onClick={() => router.push('/leaderboard')}
-            className="block w-full text-gray-400 hover:text-white text-sm transition-colors"
-          >
-            📊 View Leaderboard Display
-          </button>
-          <button
-            onClick={() => router.push('/sessions')}
-            className="block w-full text-gray-400 hover:text-red-400 text-sm transition-colors"
-          >
-            🎛️ Session Manager (Admin)
-          </button>
-        </div>
-
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-gray-500">
           Powered by Socket.IO & Next.js

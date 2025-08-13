@@ -142,13 +142,13 @@ export default function AdminPanel() {
     socket.on('admin-session-killed', (data) => {
       addMessage(data.message, 'success');
       // Automatically refresh the sessions list after killing a session
-      loadAllSessions();
+      setTimeout(() => loadAllSessions(), 500);
     });
 
     socket.on('admin-session-deleted', (data) => {
       addMessage(data.message, 'success');
       // Automatically refresh the sessions list after deletion
-      loadAllSessions();
+      setTimeout(() => loadAllSessions(), 500);
     });
 
     socket.on('admin-sessions-error', (data) => {
@@ -385,6 +385,18 @@ export default function AdminPanel() {
       }, 100);
     }
   }, [socket, isConnected, activeTab]);
+
+  // Also load when tab becomes visible (page focus)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && activeTab === 'manage' && socket && isConnected) {
+        setTimeout(() => loadAllSessions(), 200);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [activeTab, socket, isConnected]);
 
   if (!sessionData) {
     return (

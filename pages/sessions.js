@@ -29,6 +29,18 @@ export default function SessionManager() {
     }
   }, [socket, isConnected]);
 
+  // Also load when tab becomes visible (page focus)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && socket && isConnected) {
+        setTimeout(() => loadAllSessions(), 200);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [socket, isConnected]);
+
   const socketInitializer = async () => {
     socket = io();
 
@@ -49,12 +61,12 @@ export default function SessionManager() {
 
     socket.on('admin-session-killed', (data) => {
       addMessage(data.message, 'success');
-      loadAllSessions(); // Refresh the list
+      setTimeout(() => loadAllSessions(), 500); // Refresh the list with delay
     });
 
     socket.on('admin-session-deleted', (data) => {
       addMessage(data.message, 'success');
-      loadAllSessions(); // Refresh the list
+      setTimeout(() => loadAllSessions(), 500); // Refresh the list with delay
     });
 
     socket.on('admin-sessions-error', (data) => {
