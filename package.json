@@ -20,15 +20,15 @@
     "bcryptjs": "^2.4.3",
     "uuid": "^9.0.1",
     "express-session": "^1.17.3",
-    "connect-sqlite3": "^0.9.13"
+    "connect-sqlite3": "^0.9.13",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "autoprefixer": "^10.4.16",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^14.0.0",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6"
+    "eslint-config-next": "^14.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

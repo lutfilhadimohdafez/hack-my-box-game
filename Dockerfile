@@ -9,8 +9,8 @@ COPY package*.json ./
 # Remove lock file if it exists to avoid sync issues
 RUN rm -f package-lock.json
 
-# Install dependencies (use npm install to handle lock file sync)
-RUN npm install --omit=dev
+# Install all dependencies (including dev) for build
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -20,6 +20,9 @@ RUN mkdir -p database && chown -R node:node database
 
 # Build the Next.js app
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --omit=dev
 
 # Create a non-root user
 USER node
