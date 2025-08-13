@@ -18,16 +18,17 @@ COPY . .
 # Create database directory with proper permissions
 RUN mkdir -p database && chown -R node:node database
 
-# Initialize the database before building
-RUN npm run db:init
-
 # Build the Next.js app
 RUN npm run build
 
 # Remove dev dependencies after build
 RUN npm prune --omit=dev
 
-# Create a non-root user
+# Copy startup script and make it executable
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Switch to node user
 USER node
 
 # Expose port
@@ -41,5 +42,5 @@ ENV PORT=3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
-# Start the application
-CMD ["npm", "start"]
+# Start the application with database initialization
+CMD ["/app/start.sh"]
