@@ -1,2 +1,70 @@
-node_modules
-.next
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build outputs
+.next/
+out/
+
+# Production builds
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files (exclude actual database data but keep schema)
+database/*.db
+database/*.db-*
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test files (exclude from production)
+test-session-join.js
+
+# Development/debug scripts that shouldn't be in production
+scripts/create-test-session.js
+scripts/cleanup-sessions.js
+scripts/view-sessions.js
+scripts/query-db.js
+scripts/check-template-flags.js
+
+# Keep init-db.js as it's needed for production setup
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
