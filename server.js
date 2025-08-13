@@ -268,7 +268,14 @@ app.prepare().then(() => {
             clue: flag.clue,
             difficulty: flag.difficulty,
             points: flag.points
-          }))
+          })),
+          players: Array.from(gameSession.players.values())
+            .filter(p => p.id !== playerId) // Exclude current player
+            .map(p => ({
+              id: p.id,
+              name: p.username,
+              score: p.score
+            }))
         });
         
         console.log('game-joined event emitted successfully');
@@ -661,7 +668,8 @@ app.prepare().then(() => {
           socket.emit('flag-result', {
             success: true,
             message: `Correct! You earned ${result.points} points!`,
-            points: result.points
+            points: result.points,
+            flagId: data.flagId
           });
 
           // Broadcast achievement
@@ -767,6 +775,7 @@ app.prepare().then(() => {
           return;
         }
 
+        // Attack costs and durations
         const attackCosts = {
           'sleep': 10,
           'jam': 50,
@@ -779,11 +788,44 @@ app.prepare().then(() => {
           'steal': 3000
         };
 
-        const attackCost = attackCosts[data.attackType] || 50;
+        // Adjust cost if targeting all players
+        let attackCost = attackCosts[data.attackType] || 50;
+        if (data.targetId === 'all') {
+          attackCost += 100; // Extra cost for targeting all players
+        }
+        
         const duration = attackDurations[data.attackType] || 5000;
 
         if (attacker.coins < attackCost) {
           socket.emit('attack-result', { success: false, message: 'Not enough coins!' });
+          return;
+        }
+
+        // Validate target (if specified)
+        let targetPlayers = [];
+        if (data.targetId === 'all') {
+          // Target all other players (exclude attacker)
+          targetPlayers = Array.from(gameSession.players.values())
+            .filter(p => p.id !== playerId)
+            .map(p => p.id);
+        } else if (data.targetId) {
+          // Target specific player
+          if (data.targetId === playerId) {
+            socket.emit('attack-result', { success: false, message: 'Cannot attack yourself!' });
+            return;
+          }
+          if (!gameSession.players.has(data.targetId)) {
+            socket.emit('attack-result', { success: false, message: 'Target player not found!' });
+            return;
+          }
+          targetPlayers = [data.targetId];
+        } else {
+          socket.emit('attack-result', { success: false, message: 'Must specify a target!' });
+          return;
+        }
+
+        if (targetPlayers.length === 0) {
+          socket.emit('attack-result', { success: false, message: 'No valid targets found!' });
           return;
         }
 
@@ -802,23 +844,34 @@ app.prepare().then(() => {
         attacker.lastAttack = Date.now();
         attacker.isAttacking = true;
 
-        // Record attack in database
-        const attackId = await db.recordAttack(sessionId, playerId, data.attackType, null, attackCost, duration);
+        // Record attack in database (store target info)
+        const attackId = await db.recordAttack(sessionId, playerId, data.attackType, JSON.stringify(targetPlayers), attackCost, duration);
+
+        // Get target names for messaging
+        const targetNames = targetPlayers.map(id => {
+          const target = gameSession.players.get(id);
+          return target ? target.username : 'Unknown';
+        }).filter(name => name !== 'Unknown');
 
         const attack = {
           id: attackId,
           attacker: attacker.username,
           type: data.attackType,
           timestamp: Date.now(),
-          duration
+          duration,
+          targets: targetPlayers,
+          targetNames: targetNames
         };
 
         gameSession.attacks.push(attack);
 
+        // Create appropriate message
+        const targetMessage = data.targetId === 'all' ? 'all players' : targetNames.join(', ');
+        
         // Add to activity feed
         gameSession.addActivity({
           type: 'attack',
-          message: `${attacker.username} launched ${data.attackType.toUpperCase()} attack!`,
+          message: `${attacker.username} launched ${data.attackType.toUpperCase()} attack on ${targetMessage}!`,
           timestamp: Date.now(),
           playerName: attacker.username
         });
@@ -826,21 +879,135 @@ app.prepare().then(() => {
         // Log event
         await db.logEvent(sessionId, playerId, 'attack_launched', {
           attackType: data.attackType,
+          targets: targetPlayers,
           cost: attackCost,
           duration
         });
 
-        // Broadcast attack
+        // Handle steal attack special logic
+        let stealResults = [];
+        if (data.attackType === 'steal') {
+          for (const targetId of targetPlayers) {
+            const target = gameSession.players.get(targetId);
+            if (target && target.solvedFlags && target.solvedFlags.length > 0) {
+              // Determine how many flags to steal (1-2 random flags, max 50% of target's flags)
+              const maxSteal = Math.max(1, Math.floor(target.solvedFlags.length * 0.5));
+              const stealCount = Math.min(2, maxSteal);
+              
+              // Randomly select flags to steal
+              const shuffled = [...target.solvedFlags].sort(() => 0.5 - Math.random());
+              const stolenFlags = shuffled.slice(0, stealCount);
+              
+              if (stolenFlags.length > 0) {
+                // Calculate points to transfer and collect flag details
+                let totalPoints = 0;
+                const flagDetails = [];
+                for (const flagId of stolenFlags) {
+                  const flag = gameSession.flags.get(flagId);
+                  if (flag) {
+                    totalPoints += flag.points;
+                    flagDetails.push({
+                      id: flagId,
+                      title: flag.title || flagId.toUpperCase(),
+                      points: flag.points,
+                      difficulty: flag.difficulty
+                    });
+                  }
+                }
+                
+                // Update database - remove solutions from target
+                for (const flagId of stolenFlags) {
+                  await db.removeFlagSolution(targetId, flagId);
+                }
+                
+                // Update database - add solutions to attacker (if they don't already have them)
+                for (const flagId of stolenFlags) {
+                  if (!attacker.solvedFlags.includes(flagId)) {
+                    await db.addFlagSolution(playerId, flagId);
+                    attacker.solvedFlags.push(flagId);
+                  }
+                }
+                
+                // Update scores in database
+                await db.updatePlayerScore(targetId, -totalPoints, 0);
+                await db.updatePlayerScore(playerId, totalPoints, 0);
+                
+                // Update game session player data
+                target.solvedFlags = target.solvedFlags.filter(f => !stolenFlags.includes(f));
+                target.score -= totalPoints;
+                attacker.score += totalPoints;
+                
+                stealResults.push({
+                  targetName: target.username,
+                  stolenFlags: stolenFlags,
+                  flagDetails: flagDetails, // Include detailed flag information
+                  pointsStolen: totalPoints
+                });
+                
+                // Log the theft
+                await db.logEvent(sessionId, playerId, 'flags_stolen', {
+                  targetId: targetId,
+                  targetName: target.username,
+                  flagsStolen: stolenFlags,
+                  pointsStolen: totalPoints
+                });
+              }
+            }
+          }
+        }
+
+        // Broadcast attack information to all players in session
         io.to(sessionId).emit('attack-launched', attack);
+        
+        // Send targeted attack effects only to affected players
+        targetPlayers.forEach(targetId => {
+          const targetSocket = playerSockets.get(targetId);
+          if (targetSocket) {
+            io.to(targetSocket).emit('attack-targeted', {
+              attackId: attackId,
+              attacker: attacker.username,
+              type: data.attackType,
+              duration: duration
+            });
+          }
+        });
         
         // Update leaderboard to show new attack
         broadcastLeaderboard(gameSession);
         
+        // Create attack result message
+        let attackMessage = `${data.attackType.toUpperCase()} attack launched on ${targetMessage}!`;
+        if (data.attackType === 'steal' && stealResults.length > 0) {
+          const totalStolen = stealResults.reduce((sum, result) => sum + result.pointsStolen, 0);
+          const flagCount = stealResults.reduce((sum, result) => sum + result.stolenFlags.length, 0);
+          attackMessage += ` Stole ${flagCount} flag(s) worth ${totalStolen} points!`;
+        }
+        
         socket.emit('attack-result', {
           success: true,
-          message: `${data.attackType.toUpperCase()} attack launched!`,
-          coinsLeft: attacker.coins
+          message: attackMessage,
+          coinsLeft: attacker.coins,
+          stealResults: data.attackType === 'steal' ? stealResults : undefined
         });
+
+        // Send steal notifications to targets
+        if (data.attackType === 'steal' && stealResults.length > 0) {
+          stealResults.forEach(result => {
+            const targetSocket = playerSockets.get(targetPlayers.find(id => {
+              const target = gameSession.players.get(id);
+              return target && target.username === result.targetName;
+            }));
+            
+            if (targetSocket) {
+              io.to(targetSocket).emit('steal-notification', {
+                attacker: attacker.username,
+                flagsLost: result.stolenFlags,
+                flagDetails: result.flagDetails, // Include detailed flag information
+                pointsLost: result.pointsStolen
+              });
+            }
+          });
+        }
 
         // Remove attack after duration
         setTimeout(() => {

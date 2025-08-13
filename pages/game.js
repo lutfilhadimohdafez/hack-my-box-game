@@ -8,6 +8,7 @@ export default function GamePage() {
   const router = useRouter();
   const [isConnected, setIsConnected] = useState(false);
   const [player, setPlayer] = useState(null);
+  const [players, setPlayers] = useState([]); // Other players for targeting
   const [flags, setFlags] = useState([]);
   const [gameJoined, setGameJoined] = useState(false);
   const [sessionName, setSessionName] = useState('');
@@ -19,6 +20,7 @@ export default function GamePage() {
   const [isUnderAttack, setIsUnderAttack] = useState(false);
   const [gameStatus, setGameStatus] = useState('waiting');
   const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState(''); // For attack targeting
 
   useEffect(() => {
     socketInitializer();
@@ -77,6 +79,7 @@ export default function GamePage() {
       setSessionName(data.sessionName);
       setFlags(data.flags);
       setPlayer(data.player);
+      setPlayers(data.players || []); // Set other players for targeting
       setGameJoined(true);
       setGameStatus(data.sessionStatus || 'waiting'); // Use actual session status
       addMessage(`Welcome to ${data.sessionName}!`, 'success');
@@ -86,7 +89,7 @@ export default function GamePage() {
         addMessage('Waiting for admin to start the game...', 'info');
       }
       
-      console.log('Game joined successfully, flags:', data.flags?.length, 'status:', data.sessionStatus);
+      console.log('Game joined successfully, flags:', data.flags?.length, 'players:', data.players?.length, 'status:', data.sessionStatus);
     });
 
     socket.on('session-status-changed', (data) => {
@@ -102,15 +105,36 @@ export default function GamePage() {
     });
 
     socket.on('flag-result', (data) => {
+      console.log('Flag result received:', data);
       addMessage(data.message, data.success ? 'success' : 'error');
       if (data.success) {
-        setPlayer(prev => ({ 
-          ...prev, 
-          score: prev.score + data.points,
-          solvedFlags: [...(prev.solvedFlags || []), selectedFlag]
-        }));
+        console.log('Flag solved successfully, updating player state');
+        console.log('Current player solvedFlags before update:', player?.solvedFlags);
+        console.log('Adding flag ID to solved:', data.flagId);
+        
+        setPlayer(prev => {
+          const currentSolved = prev.solvedFlags || [];
+          // Make sure we don't add duplicates
+          const newSolvedFlags = currentSolved.includes(data.flagId) 
+            ? currentSolved 
+            : [...currentSolved, data.flagId];
+            
+          const updatedPlayer = { 
+            ...prev, 
+            score: prev.score + data.points,
+            solvedFlags: newSolvedFlags
+          };
+          console.log('Updated player solvedFlags:', updatedPlayer.solvedFlags);
+          return updatedPlayer;
+        });
+        
         setFlagAnswer('');
         setSelectedFlag(null);
+        
+        // Force a small delay to ensure state has updated
+        setTimeout(() => {
+          console.log('Flag completion processed, should now show as solved');
+        }, 100);
       }
     });
 
@@ -131,20 +155,83 @@ export default function GamePage() {
       addMessage(data.message, data.success ? 'success' : 'error');
       if (data.success) {
         setPlayer(prev => ({ ...prev, coins: data.coinsLeft }));
+        
+        // Handle steal results - update player's solved flags and score
+        if (data.stealResults && data.stealResults.length > 0) {
+          // Show detailed steal logs for each target
+          data.stealResults.forEach(result => {
+            if (result.flagDetails && result.flagDetails.length > 0) {
+              addMessage(`💰 Stolen from ${result.targetName}:`, 'success');
+              result.flagDetails.forEach(flag => {
+                addMessage(`  → ${flag.title} (${flag.difficulty}, ${flag.points} pts)`, 'success');
+              });
+              addMessage(`  Total gained: ${result.pointsStolen} points`, 'success');
+            } else if (result.pointsStolen === 0) {
+              addMessage(`🔍 ${result.targetName} had no flags to steal`, 'warning');
+            }
+          });
+          
+          setPlayer(prev => {
+            const totalPointsGained = data.stealResults.reduce((sum, result) => sum + result.pointsStolen, 0);
+            const newFlags = [...prev.solvedFlags];
+            
+            // Add stolen flags to solved flags
+            data.stealResults.forEach(result => {
+              result.stolenFlags.forEach(flagId => {
+                if (!newFlags.includes(flagId)) {
+                  newFlags.push(flagId);
+                }
+              });
+            });
+            
+            return {
+              ...prev,
+              score: prev.score + totalPointsGained,
+              solvedFlags: newFlags
+            };
+          });
+        }
       }
+    });
+
+    socket.on('steal-notification', (data) => {
+      addMessage(`� ${data.attacker} stole from you!`, 'error');
+      
+      // Show detailed information about what was stolen
+      if (data.flagDetails && data.flagDetails.length > 0) {
+        data.flagDetails.forEach(flag => {
+          addMessage(`  → Lost: ${flag.title} (${flag.difficulty}, ${flag.points} pts)`, 'error');
+        });
+        addMessage(`  Total lost: ${data.pointsLost} points`, 'error');
+      }
+      
+      // Update player state - remove stolen flags and points
+      setPlayer(prev => ({
+        ...prev,
+        score: prev.score - data.pointsLost,
+        solvedFlags: prev.solvedFlags.filter(flagId => !data.flagsLost.includes(flagId))
+      }));
     });
 
     socket.on('attack-launched', (attack) => {
       setAttacks(prev => [...prev, attack]);
+      // Show message about attack but don't affect this player unless they're targeted
+      const targetMessage = attack.targetNames ? 
+        (attack.targetNames.length > 1 ? `targeting ${attack.targetNames.join(', ')}` : `targeting ${attack.targetNames[0]}`) :
+        'on all players';
+      addMessage(`🚨 ${attack.attacker} launched a ${attack.type.toUpperCase()} attack ${targetMessage}!`, 'warning');
+    });
+
+    socket.on('attack-targeted', (data) => {
+      // This event is only sent to players who are actually targeted
       setIsUnderAttack(true);
-      addMessage(`🚨 ${attack.attacker} launched a ${attack.type.toUpperCase()} attack!`, 'warning');
+      addMessage(`🚨 You are under ${data.type.toUpperCase()} attack by ${data.attacker}!`, 'error');
       
-      // Simulate attack effects
-      if (attack.type === 'sleep') {
-        setTimeout(() => setIsUnderAttack(false), attack.duration);
-      } else {
-        setTimeout(() => setIsUnderAttack(false), 3000);
-      }
+      // Apply attack effects based on type
+      setTimeout(() => {
+        setIsUnderAttack(false);
+        addMessage(`Attack ended - systems restored`, 'info');
+      }, data.duration);
     });
 
     socket.on('attack-ended', (attackId) => {
@@ -154,6 +241,20 @@ export default function GamePage() {
     socket.on('player-achievement', (data) => {
       if (data.playerName !== player?.name) {
         addMessage(`${data.playerName} solved ${data.flagId.toUpperCase()}!`, 'info');
+      }
+    });
+
+    socket.on('leaderboard-update', (data) => {
+      // Update players list with current scores, excluding current player
+      if (data.players && player) {
+        const otherPlayers = data.players
+          .filter(p => p.id !== player.id)
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            score: p.score
+          }));
+        setPlayers(otherPlayers);
       }
     });
 
@@ -192,8 +293,11 @@ export default function GamePage() {
   };
 
   const launchAttack = (attackType) => {
-    if (gameStatus === 'active') {
-      socket.emit('launch-attack', { attackType });
+    if (gameStatus === 'active' && selectedTarget) {
+      socket.emit('launch-attack', { 
+        attackType: attackType,
+        targetId: selectedTarget 
+      });
     }
   };
 
@@ -373,34 +477,63 @@ export default function GamePage() {
           {/* Attack Panel */}
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-bold mb-4 text-red-400">⚔️ Attacks</h2>
+            
+            {/* Target Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">Select Target:</label>
+              <select 
+                value={selectedTarget} 
+                onChange={(e) => setSelectedTarget(e.target.value)}
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+              >
+                <option value="">Choose target...</option>
+                {players.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.score} pts)</option>
+                ))}
+                <option value="all">🎯 All Players (+50 coins cost)</option>
+              </select>
+            </div>
+
             <div className="space-y-3">
               <button
                 onClick={() => launchAttack('sleep')}
-                disabled={player?.coins < 10 || isUnderAttack || gameStatus !== 'active'}
+                disabled={player?.coins < 10 || isUnderAttack || gameStatus !== 'active' || !selectedTarget}
                 className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white p-2 rounded text-sm"
               >
                 Sleep Attack (10 coins)
-                <div className="text-xs opacity-75">Freeze opponents for 10s</div>
+                <div className="text-xs opacity-75">Freeze target for 10s</div>
               </button>
               
               <button
                 onClick={() => launchAttack('jam')}
-                disabled={player?.coins < 50 || isUnderAttack || gameStatus !== 'active'}
+                disabled={player?.coins < (selectedTarget === 'all' ? 150 : 50) || isUnderAttack || gameStatus !== 'active' || !selectedTarget}
                 className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white p-2 rounded text-sm"
               >
-                Jam Attack (50 coins)
-                <div className="text-xs opacity-75">Disrupt all PCs for 5s</div>
+                Jam Attack ({selectedTarget === 'all' ? '150' : '50'} coins)
+                <div className="text-xs opacity-75">Disrupt target{selectedTarget === 'all' ? 's' : ''} for {selectedTarget === 'all' ? '7' : '5'}s</div>
               </button>
               
               <button
                 onClick={() => launchAttack('steal')}
-                disabled={player?.coins < 100 || isUnderAttack || gameStatus !== 'active'}
+                disabled={player?.coins < (selectedTarget === 'all' ? 200 : 100) || isUnderAttack || gameStatus !== 'active' || !selectedTarget}
                 className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white p-2 rounded text-sm"
               >
-                Data Steal (100 coins)
-                <div className="text-xs opacity-75">Steal team data</div>
+                Data Steal ({selectedTarget === 'all' ? '200' : '100'} coins)
+                <div className="text-xs opacity-75">Steal solved flags & points from target{selectedTarget === 'all' ? 's' : ''}</div>
               </button>
             </div>
+
+            {!selectedTarget && players.length > 0 && (
+              <div className="mt-3 text-xs text-yellow-300 text-center">
+                ⚠️ Select a target to launch attacks
+              </div>
+            )}
+
+            {players.length === 0 && (
+              <div className="mt-3 text-xs text-gray-400 text-center">
+                No other players to attack
+              </div>
+            )}
 
             {/* Active Attacks */}
             {attacks.length > 0 && (
@@ -408,7 +541,12 @@ export default function GamePage() {
                 <h4 className="font-medium text-red-400 mb-2">🚨 Active Attacks:</h4>
                 {attacks.map((attack) => (
                   <div key={attack.id} className="text-sm text-red-300">
-                    {attack.attacker}: {attack.type.toUpperCase()}
+                    <div className="font-medium">{attack.attacker}: {attack.type.toUpperCase()}</div>
+                    {attack.targetNames && (
+                      <div className="text-xs opacity-75">
+                        → {attack.targetNames.length > 1 ? `${attack.targetNames.join(', ')}` : attack.targetNames[0]}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
