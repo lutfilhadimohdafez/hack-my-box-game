@@ -8,6 +8,8 @@ export default function AdminPanel() {
   const router = useRouter();
   const [isConnected, setIsConnected] = useState(false);
   const [sessionData, setSessionData] = useState(null);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [players, setPlayers] = useState([]);
   const [gameStatus, setGameStatus] = useState('waiting');
   const [messages, setMessages] = useState([]);
@@ -344,6 +346,12 @@ export default function AdminPanel() {
   };
 
   const switchTab = (tab) => {
+    // Restrict access to templates and manage tabs for non-super admins
+    if ((tab === 'templates' || tab === 'manage') && !isSuperAdmin) {
+      addMessage('Access denied: Super admin privileges required', 'error');
+      return;
+    }
+    
     setActiveTab(tab);
     if (tab === 'templates') {
       loadTemplateFlags();
@@ -358,13 +366,20 @@ export default function AdminPanel() {
 
   // Get session info from URL params and join session room
   useEffect(() => {
-    const { session, sessionCode, sessionName } = router.query;
+    const { session, sessionCode, sessionName, adminPassword } = router.query;
     if (session) {
       setSessionData({
         id: session,
         sessionCode: sessionCode || 'UNKNOWN',
         sessionName: decodeURIComponent(sessionName || 'Unknown Session')
       });
+      
+      // Check if this is super admin
+      if (adminPassword) {
+        const decodedPassword = decodeURIComponent(adminPassword);
+        setAdminPassword(decodedPassword);
+        setIsSuperAdmin(decodedPassword === 'admin123');
+      }
       
       // Join the session room for live updates
       if (socket && isConnected) {
@@ -376,27 +391,27 @@ export default function AdminPanel() {
     }
   }, [router.query, socket, isConnected]);
 
-  // Auto-load sessions when socket connects and user is on manage tab
+  // Auto-load sessions when socket connects and user is on manage tab (super admin only)
   useEffect(() => {
-    if (socket && isConnected && activeTab === 'manage') {
+    if (socket && isConnected && activeTab === 'manage' && isSuperAdmin) {
       // Add a small delay to ensure all socket handlers are set up
       setTimeout(() => {
         loadAllSessions();
       }, 100);
     }
-  }, [socket, isConnected, activeTab]);
+  }, [socket, isConnected, activeTab, isSuperAdmin]);
 
-  // Also load when tab becomes visible (page focus)
+  // Also load when tab becomes visible (page focus) - super admin only
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && activeTab === 'manage' && socket && isConnected) {
+      if (!document.hidden && activeTab === 'manage' && socket && isConnected && isSuperAdmin) {
         setTimeout(() => loadAllSessions(), 200);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [activeTab, socket, isConnected]);
+  }, [activeTab, socket, isConnected, isSuperAdmin]);
 
   if (!sessionData) {
     return (
@@ -421,7 +436,9 @@ export default function AdminPanel() {
             >
               ← Back
             </button>
-            <h1 className="text-2xl font-bold text-red-400">👑 Admin Panel</h1>
+            <h1 className="text-2xl font-bold text-red-400">
+              👑 Admin Panel {isSuperAdmin && <span className="text-yellow-400 text-sm ml-2">⭐ SUPER ADMIN</span>}
+            </h1>
             <div className="text-gray-300">{sessionData.sessionName}</div>
           </div>
           <div className="flex items-center space-x-6">
@@ -588,26 +605,30 @@ export default function AdminPanel() {
             >
               🚩 Session Flags
             </button>
-            <button
-              onClick={() => switchTab('templates')}
-              className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
-                activeTab === 'templates'
-                  ? 'bg-orange-600 text-white border-b-2 border-orange-400'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              📋 Default Templates
-            </button>
-            <button
-              onClick={() => switchTab('manage')}
-              className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
-                activeTab === 'manage'
-                  ? 'bg-orange-600 text-white border-b-2 border-orange-400'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              🎛️ Manage Sessions
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={() => switchTab('templates')}
+                className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
+                  activeTab === 'templates'
+                    ? 'bg-orange-600 text-white border-b-2 border-orange-400'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                📋 Default Templates
+              </button>
+            )}
+            {isSuperAdmin && (
+              <button
+                onClick={() => switchTab('manage')}
+                className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
+                  activeTab === 'manage'
+                    ? 'bg-orange-600 text-white border-b-2 border-orange-400'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                🎛️ Manage Sessions
+              </button>
+            )}
           </div>
 
           {/* Session Flags Tab */}
