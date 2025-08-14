@@ -619,6 +619,66 @@ app.prepare().then(() => {
       }
     });
 
+    // Admin: Update player coins
+    socket.on('admin-update-coins', async (data) => {
+      console.log('Admin updating player coins:', data);
+      try {
+        const { playerId, newCoins } = data;
+        
+        // Validate coins amount
+        if (typeof newCoins !== 'number' || newCoins < 0) {
+          socket.emit('admin-coins-error', { message: 'Invalid coins amount' });
+          return;
+        }
+        
+        const success = await db.updatePlayerCoins(playerId, newCoins);
+        
+        if (success) {
+          // Get updated player info
+          const player = await db.getPlayer(playerId);
+          
+          socket.emit('admin-coins-updated', { 
+            message: `Player coins updated to ${newCoins}`,
+            player: player
+          });
+          
+          // Notify the player if they're connected
+          const playerSocketId = playerSockets.get(playerId);
+          if (playerSocketId) {
+            io.to(playerSocketId).emit('coins-updated', { 
+              coins: newCoins,
+              message: 'Your coins have been updated by admin'
+            });
+          }
+          
+          // Update leaderboard for all users in the session
+          if (player && player.session_id) {
+            const sessionPlayers = await db.getSessionPlayers(player.session_id);
+            io.to(player.session_id).emit('leaderboard-update', { leaderboard: sessionPlayers });
+          }
+        } else {
+          socket.emit('admin-coins-error', { message: 'Failed to update coins' });
+        }
+        
+      } catch (error) {
+        console.error('Error updating player coins:', error);
+        socket.emit('admin-coins-error', { message: 'Failed to update coins' });
+      }
+    });
+
+    // Admin: Get session players for coin management
+    socket.on('admin-get-session-players', async (data) => {
+      console.log('Admin requesting session players for coin management:', data);
+      try {
+        const { sessionId } = data;
+        const players = await db.getSessionPlayers(sessionId);
+        socket.emit('admin-session-players-list', { players });
+      } catch (error) {
+        console.error('Error getting session players:', error);
+        socket.emit('admin-coins-error', { message: 'Failed to get players' });
+      }
+    });
+
     // Submit flag
     socket.on('submit-flag', async (data) => {
       try {

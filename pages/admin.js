@@ -18,11 +18,13 @@ export default function AdminPanel() {
   const [flags, setFlags] = useState([]);
   const [templateFlags, setTemplateFlags] = useState([]);
   const [allSessions, setAllSessions] = useState([]);
-  const [activeTab, setActiveTab] = useState('session'); // 'session', 'templates', or 'manage'
+  const [sessionPlayers, setSessionPlayers] = useState([]);
+  const [activeTab, setActiveTab] = useState('session'); // 'session', 'coins', 'templates', or 'manage'
   const [showFlagForm, setShowFlagForm] = useState(false);
   const [showTemplateFlagForm, setShowTemplateFlagForm] = useState(false);
   const [editingFlag, setEditingFlag] = useState(null);
   const [editingTemplateFlag, setEditingTemplateFlag] = useState(null);
+  const [editingPlayer, setEditingPlayer] = useState(null);
   const [flagForm, setFlagForm] = useState({
     title: '',
     clue: '',
@@ -154,6 +156,24 @@ export default function AdminPanel() {
     });
 
     socket.on('admin-sessions-error', (data) => {
+      addMessage(data.message, 'error');
+    });
+
+    // Coin management socket handlers
+    socket.on('admin-session-players-list', (data) => {
+      setSessionPlayers(data.players);
+    });
+
+    socket.on('admin-coins-updated', (data) => {
+      addMessage(data.message, 'success');
+      // Update the player in the list
+      setSessionPlayers(prev => prev.map(player => 
+        player.id === data.player.id ? data.player : player
+      ));
+      setEditingPlayer(null);
+    });
+
+    socket.on('admin-coins-error', (data) => {
       addMessage(data.message, 'error');
     });
   };
@@ -345,6 +365,33 @@ export default function AdminPanel() {
     }
   };
 
+  // Coin management functions
+  const loadSessionPlayers = () => {
+    if (sessionData && socket) {
+      socket.emit('admin-get-session-players', { sessionId: sessionData.id });
+    }
+  };
+
+  const updatePlayerCoins = (playerId, newCoins) => {
+    if (socket && typeof newCoins === 'number' && newCoins >= 0) {
+      socket.emit('admin-update-coins', { playerId, newCoins });
+    } else {
+      addMessage('Invalid coins amount', 'error');
+    }
+  };
+
+  const handleCoinUpdate = (player) => {
+    const newCoins = prompt(`Enter new coins amount for ${player.username}:`, player.coins);
+    if (newCoins !== null) {
+      const coins = parseInt(newCoins);
+      if (!isNaN(coins) && coins >= 0) {
+        updatePlayerCoins(player.id, coins);
+      } else {
+        addMessage('Please enter a valid number (0 or greater)', 'error');
+      }
+    }
+  };
+
   const switchTab = (tab) => {
     // Restrict access to templates and manage tabs for non-super admins
     if ((tab === 'templates' || tab === 'manage') && !isSuperAdmin) {
@@ -357,6 +404,8 @@ export default function AdminPanel() {
       loadTemplateFlags();
     } else if (tab === 'manage') {
       loadAllSessions();
+    } else if (tab === 'coins') {
+      loadSessionPlayers();
     }
   };
 
@@ -605,6 +654,16 @@ export default function AdminPanel() {
             >
               🚩 Session Flags
             </button>
+            <button
+              onClick={() => switchTab('coins')}
+              className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-colors ${
+                activeTab === 'coins'
+                  ? 'bg-orange-600 text-white border-b-2 border-orange-400'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              💰 Player Coins
+            </button>
             {isSuperAdmin && (
               <button
                 onClick={() => switchTab('templates')}
@@ -690,6 +749,58 @@ export default function AdminPanel() {
                     <div className="text-4xl mb-2">🚩</div>
                     <div>No flags created yet</div>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Player Coins Tab */}
+          {activeTab === 'coins' && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-orange-400">💰 Player Coins Management</h2>
+                <button
+                  onClick={loadSessionPlayers}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm"
+                >
+                  🔄 Refresh Players
+                </button>
+              </div>
+
+              {/* Players List */}
+              <div className="space-y-3">
+                {sessionPlayers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <div>No players in this session yet</div>
+                  </div>
+                ) : (
+                  sessionPlayers.map((player, index) => (
+                    <div key={player.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center space-x-4">
+                          <div className="text-xl font-bold text-orange-400">#{index + 1}</div>
+                          <div>
+                            <div className="font-bold text-lg text-white">{player.username}</div>
+                            <div className="text-gray-400 text-sm">
+                              Score: {player.score} | Status: {player.is_active ? '🟢 Active' : '🔴 Inactive'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-yellow-400">💰 {player.coins} coins</div>
+                            <div className="text-xs text-gray-400">Last activity: {new Date(player.last_activity).toLocaleString()}</div>
+                          </div>
+                          <button
+                            onClick={() => handleCoinUpdate(player)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
+                          >
+                            ✏️ Edit Coins
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
