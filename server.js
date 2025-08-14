@@ -175,7 +175,8 @@ app.prepare().then(() => {
           }
           socket.emit('admin-authenticated', { 
             sessionId: sessionData.id,
-            sessionName: sessionData.session_name 
+            sessionName: sessionData.session_name,
+            adminPassword: adminPassword
           });
           return;
         }

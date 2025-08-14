@@ -101,7 +101,7 @@ export default function JoinSession() {
       // Pass sessionId, sessionCode, sessionName, and admin password in URL for admin panel
       if (joinData) {
         const sessionName = joinData.sessionName || data.sessionName || 'New Session';
-        const adminPassword = formData.adminPassword;
+        const adminPassword = data.adminPassword || formData.adminPassword;
         const adminUrl = `/admin?session=${data.sessionId}&sessionCode=${joinData.sessionCode}&sessionName=${encodeURIComponent(sessionName)}&adminPassword=${encodeURIComponent(adminPassword)}`;
         console.log('Redirecting admin to:', adminUrl);
         
@@ -113,7 +113,7 @@ export default function JoinSession() {
         router.push(adminUrl);
       } else {
         console.log('No currentJoinData, redirecting to basic admin URL');
-        const adminPassword = formData.adminPassword;
+        const adminPassword = data.adminPassword || formData.adminPassword;
         router.push(`/admin?session=${data.sessionId}&adminPassword=${encodeURIComponent(adminPassword)}`);
       }
     });
