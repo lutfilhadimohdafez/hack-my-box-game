@@ -18,6 +18,8 @@ export default function GamePage() {
   const [hints, setHints] = useState({});
   const [attacks, setAttacks] = useState([]);
   const [isUnderAttack, setIsUnderAttack] = useState(false);
+  const [attackAnimation, setAttackAnimation] = useState(null); // For custom attack animations
+  const [terminalLines, setTerminalLines] = useState([]); // For terminal-style animations
   const [gameStatus, setGameStatus] = useState('waiting');
   const [challengeCompleted, setChallengeCompleted] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState(''); // For attack targeting
@@ -227,11 +229,24 @@ export default function GamePage() {
       setIsUnderAttack(true);
       addMessage(`🚨 You are under ${data.type.toUpperCase()} attack by ${data.attacker}!`, 'error');
       
-      // Apply attack effects based on type
-      setTimeout(() => {
-        setIsUnderAttack(false);
-        addMessage(`Attack ended - systems restored`, 'info');
-      }, data.duration);
+      // Apply attack effects based on type with custom animations
+      switch(data.type) {
+        case 'jam':
+          startJamAttackAnimation(data.attacker, data.duration);
+          break;
+        case 'ddos':
+          startDdosAttackAnimation(data.attacker, data.duration);
+          break;
+        case 'steal':
+          startStealAttackAnimation(data.attacker, data.duration);
+          break;
+        default:
+          // Default behavior for other attack types
+          setTimeout(() => {
+            setIsUnderAttack(false);
+            addMessage(`Attack ended - systems restored`, 'info');
+          }, data.duration);
+      }
     });
 
     socket.on('attack-ended', (attackId) => {
@@ -271,6 +286,63 @@ export default function GamePage() {
       type, 
       timestamp: new Date().toLocaleTimeString() 
     }].slice(-10));
+  };
+
+  // Attack Animation Functions
+  const startJamAttackAnimation = (attacker, duration) => {
+    setAttackAnimation('jam');
+    setTerminalLines([]);
+    
+    const jamMessages = [
+      "SYSTEM BREACH DETECTED...",
+      "UNAUTHORIZED ACCESS ATTEMPT",
+      `SOURCE: ${attacker.toUpperCase()}`,
+      "FIREWALL STATUS: COMPROMISED",
+      "NETWORK SECURITY: OFFLINE",
+      "ATTEMPTING COUNTERMEASURES...",
+      "ERROR: COUNTERMEASURES FAILED",
+      "SYSTEM JAMMED - FUNCTIONALITY LIMITED",
+      "COMMUNICATION CHANNELS: DISRUPTED",
+      "RESTORE PROTOCOL: INITIALIZING...",
+      "PLEASE WAIT FOR SYSTEM RECOVERY..."
+    ];
+
+    let currentLine = 0;
+    const typewriterInterval = setInterval(() => {
+      if (currentLine < jamMessages.length) {
+        setTerminalLines(prev => [...prev, jamMessages[currentLine]]);
+        currentLine++;
+      } else {
+        clearInterval(typewriterInterval);
+      }
+    }, 800);
+
+    // End animation after duration
+    setTimeout(() => {
+      clearInterval(typewriterInterval);
+      setAttackAnimation(null);
+      setTerminalLines([]);
+      setIsUnderAttack(false);
+    }, duration);
+  };
+
+  const startDdosAttackAnimation = (attacker, duration) => {
+    setAttackAnimation('ddos');
+    
+    // Create visual lag/freeze effect
+    setTimeout(() => {
+      setAttackAnimation(null);
+      setIsUnderAttack(false);
+    }, duration);
+  };
+
+  const startStealAttackAnimation = (attacker, duration) => {
+    setAttackAnimation('steal');
+    
+    setTimeout(() => {
+      setAttackAnimation(null);
+      setIsUnderAttack(false);
+    }, duration);
   };
 
   const submitFlag = () => {
@@ -333,7 +405,46 @@ export default function GamePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-900 text-white relative">
+      {/* Attack Animation Overlays */}
+      {attackAnimation === 'jam' && (
+        <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+          <div className="font-mono text-green-400 text-lg space-y-2 max-w-2xl mx-auto p-8">
+            <div className="text-center text-red-400 text-2xl mb-8">⚠️ SYSTEM COMPROMISED ⚠️</div>
+            {terminalLines.map((line, index) => (
+              <div key={index} className="typing-animation">
+                <span className="text-gray-500">{'>'}</span> {line}
+              </div>
+            ))}
+            <div className="text-center text-yellow-400 mt-8 animate-pulse">
+              SIGNAL JAMMED - RESTORING CONNECTION...
+            </div>
+          </div>
+        </div>
+      )}
+
+      {attackAnimation === 'ddos' && (
+        <div className="fixed inset-0 bg-red-900 bg-opacity-80 z-50 flex items-center justify-center">
+          <div className="text-center animate-pulse glitch">
+            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-3xl font-bold text-red-400 mb-4">DDOS ATTACK</div>
+            <div className="text-xl text-gray-300">System Overloaded</div>
+            <div className="text-lg text-gray-400 animate-bounce mt-4">Loading...</div>
+          </div>
+        </div>
+      )}
+
+      {attackAnimation === 'steal' && (
+        <div className="fixed inset-0 bg-purple-900 bg-opacity-80 z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-6xl mb-4 animate-pulse">🕵️</div>
+            <div className="text-3xl font-bold text-purple-400 mb-4">INFILTRATION DETECTED</div>
+            <div className="text-xl text-gray-300">Unauthorized data access</div>
+            <div className="text-lg text-gray-400 mt-4">Scanning for breaches...</div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gray-800 p-4 shadow-lg">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
